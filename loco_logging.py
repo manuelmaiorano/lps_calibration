@@ -11,6 +11,7 @@ import log_util
 import cflib.crtp
 from cflib.crazyflie import Crazyflie
 from cflib.crazyflie.syncCrazyflie import SyncCrazyflie
+from lpslib.lopoanchor import LoPoAnchor
 
 URI = 'radio://0/80/2M/E7E7E7E703'
 
@@ -59,8 +60,14 @@ def log_update_distances(name, timestamp, data, logconf):
 
     print(distances_avg)
 
+def write_to_anchors(coords):
+    cflib.crtp.init_drivers()
 
-
+    cf = Crazyflie(rw_cache='./cache')
+    with SyncCrazyflie(URI, cf=cf) as scf:
+        anchors = LoPoAnchor(scf)
+        for i in range(N_ANCHORS):
+            anchors.set_position(i, coords[i][:])
 
 if __name__ == '__main__':
     # Initialize the low-level drivers
@@ -81,3 +88,5 @@ if __name__ == '__main__':
 
     # coords = optimization.get_optimized_coords(distances_avg)
     # print(coords)
+    # coords = optimization.infer_labels(coords)
+    # write_to_anchors(coords)

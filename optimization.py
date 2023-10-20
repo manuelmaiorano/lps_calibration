@@ -5,7 +5,9 @@ from mpl_toolkits.mplot3d import Axes3D # <--- This is important for 3d plotting
 
 
 
-N_ANCHORS = 7
+N_ANCHORS = 8
+N_COORDS = 3
+
 
 
 def cost(x, distances):
@@ -16,7 +18,7 @@ def cost(x, distances):
             if i == j:
                 continue
 
-            cost += (distances[i][j] - np.sqrt(np.sum((x[i*3:i*3+3] - x[j*3:j*3+3])**2)))**2
+            cost += (distances[i][j] - np.sqrt(np.sum((x[i*N_COORDS:i*N_COORDS+3] - x[j*N_COORDS:j*N_COORDS+3])**2)))**2
 
     print(cost)
 
@@ -26,9 +28,12 @@ def get_optimized_coords(distances):
 
     cons = ({'type': 'eq', 'fun': lambda x:  x[0]},
             {'type': 'eq', 'fun': lambda x:  x[1]},
-            {'type': 'eq', 'fun': lambda x:  x[2]},)
+            {'type': 'eq', 'fun': lambda x:  x[2]},
+            {'type': 'eq', 'fun': lambda x:  x[N_COORDS*5 + 0]},
+            {'type': 'eq', 'fun': lambda x:  x[N_COORDS*5 + 2]},
+            {'type': 'eq', 'fun': lambda x:  x[N_COORDS*7 + 2]},)
     
-    xc = (distances[0][1]**2 + distances[2][0]**2 - distances[2][1]**2)/(2*distances[0][1])
+    #xc = (distances[0][1]**2 + distances[2][0]**2 - distances[2][1]**2)/(2*distances[0][1])
     x0=np.zeros((N_ANCHORS*3,))
     #x0[0:9] = np.array([0,0,0,distances[0][1],0,0, xc, np.sqrt((distances[2][0]**2-xc**2)), 0])
 
@@ -45,22 +50,67 @@ def from_coords_to_distances(coords):
 
     return distances
 
+def infer_labels(coords):
+    reference = np.array([[0,0,0],
+                        [0, 1, 1],
+                        [1, 1, 0],
+                        [1, 0, 1],
+                        [0, 0, 1],
+                        [0, 1, 0],
+                        [1, 1, 1],
+                        [1, 0, 0]])
+    
+    maxz = np.max(coords[:, 2])
+    maxy = np.max(coords[:, 1])
+    maxx = np.max(coords[:, 0])
+
+    coords_ = coords / np.array([maxx, maxy, maxz])
+    
+    label2coord = np.zeros((N_ANCHORS, N_COORDS))
+    
+    for i in range(N_ANCHORS):
+        coord = coords_[i][:]
+
+        label = np.argmin(np.sum((reference - coord)**2, 1))
+        label2coord[label][:] = coords[i][:]
+
+    return label2coord
+
 if __name__ == "__main__":
     
-    distances = from_coords_to_distances(np.array([[0,0,0],
-                                                  [0,1,0],
-                                                  [1,0,0],
-                                                  [0, 0, 1],
-                                                  [0, 0, -1],
-                                                  [0, -1, 0],
-                                                  [-1, 0, 0]]))
+    # distances = from_coords_to_distances(np.array([[0,0,0],
+    #                                               [0,1,0],
+    #                                               [1,0,0],
+    #                                               [0, 0, 1],
+    #                                               [0, 0, -1],
+    #                                               [0, -1, 0],
+    #                                               [-1, 0, 0]]))
+    
+    distances = from_coords_to_distances(np.array([[0,0,0.18],
+                                                  [0.38,3.94,2.25],
+                                                  [3.95,3.94,0.18],
+                                                  [4.5, -1.1, 2.25],
+                                                  [0, 0, 2.25],
+                                                  [0.382, 3.94, 0.18],
+                                                  [3.952, 3.94, 2.25],
+                                                  [4.5, -1.10, 0.18]]))
     
     coords = get_optimized_coords(distances)
     
+    print("results")
+    print(coords)
+    coords = infer_labels(coords)
+    print("inferred order")
     print(coords)
 
     fig = plt.figure()
     ax = fig.add_subplot(projection='3d')
+
+    ax.set_xlabel('X axis')
+    ax.set_ylabel('Y axis')
+    ax.set_zlabel('Z axis')
     ax.scatter(coords[:, 0], coords[:, 1], coords[:, 2])
+    for i in range(N_ANCHORS):
+        ax.text(coords[i, 0], coords[i, 1], coords[i, 2], f"{i}", color="red")
     plt.show()
 
