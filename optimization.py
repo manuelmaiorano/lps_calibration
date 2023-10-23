@@ -10,12 +10,15 @@ N_COORDS = 3
 
 
 
-def cost(x, distances):
+def cost(x, distances, to_reject=[]):
     cost = 0
 
     for i in range(N_ANCHORS):
         for j in range(N_ANCHORS):
             if i == j:
+                continue
+
+            if (i,j) in to_reject or (j,i) in to_reject:
                 continue
 
             cost += (distances[i][j] - np.sqrt(np.sum((x[i*N_COORDS:i*N_COORDS+3] - x[j*N_COORDS:j*N_COORDS+3])**2)))**2
@@ -24,7 +27,7 @@ def cost(x, distances):
 
     return cost
 
-def get_optimized_coords(distances):
+def get_optimized_coords(distances, to_reject=[]):
 
     cons = ({'type': 'eq', 'fun': lambda x:  x[0]},
             {'type': 'eq', 'fun': lambda x:  x[1]},
@@ -37,7 +40,7 @@ def get_optimized_coords(distances):
     x0=np.zeros((N_ANCHORS*3,))
     #x0[0:9] = np.array([0,0,0,distances[0][1],0,0, xc, np.sqrt((distances[2][0]**2-xc**2)), 0])
 
-    res = minimize(lambda x: cost(x, distances), x0=x0,constraints=cons)
+    res = minimize(lambda x: cost(x, distances, to_reject=to_reject), x0=x0,constraints=cons)
 
     return np.reshape(res.x, (N_ANCHORS, 3))
 
@@ -95,7 +98,9 @@ if __name__ == "__main__":
                                                   [3.952, 3.94, 2.25],
                                                   [4.5, -1.10, 0.18]]))
     
-    coords = get_optimized_coords(distances)
+    to_reject = [(0,4), (1,5), (2,6), (3,7)]
+    
+    coords = get_optimized_coords(distances, to_reject=to_reject)
     
     print("results")
     print(coords)

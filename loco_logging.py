@@ -13,6 +13,10 @@ from cflib.crazyflie import Crazyflie
 from cflib.crazyflie.syncCrazyflie import SyncCrazyflie
 from lpslib.lopoanchor import LoPoAnchor
 
+
+import matplotlib.pyplot as plt
+from mpl_toolkits.mplot3d import Axes3D # <--- This is important for 3d plotting 
+
 URI = 'radio://0/80/2M/E7E7E7E703'
 
 N_ANCHORS = 8
@@ -65,7 +69,7 @@ def write_to_anchors(coords):
 
     cf = Crazyflie(rw_cache='./cache')
     with SyncCrazyflie(URI, cf=cf) as scf:
-        anchors = LoPoAnchor(scf)
+        anchors = LoPoAnchor(scf.cf)
         for i in range(N_ANCHORS):
             anchors.set_position(i, coords[i][:])
 
@@ -86,7 +90,22 @@ if __name__ == '__main__':
 
         time.sleep(10)
 
-    # coords = optimization.get_optimized_coords(distances_avg)
-    # print(coords)
-    # coords = optimization.infer_labels(coords)
+    print("optimization")
+    coords = optimization.get_optimized_coords(distances_avg)
+    print(coords)
+    coords = optimization.infer_labels(coords)
+   
+    print("inferred order")
+    print(coords)
+
+    fig = plt.figure()
+    ax = fig.add_subplot(projection='3d')
+
+    ax.set_xlabel('X axis')
+    ax.set_ylabel('Y axis')
+    ax.set_zlabel('Z axis')
+    ax.scatter(coords[:, 0], coords[:, 1], coords[:, 2])
+    for i in range(N_ANCHORS):
+        ax.text(coords[i, 0], coords[i, 1], coords[i, 2], f"{i}", color="red")
+    plt.show()
     # write_to_anchors(coords)

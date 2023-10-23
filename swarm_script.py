@@ -131,6 +131,7 @@ def run_sequence(scf: SyncCrazyflie, sequence):
 if __name__ == '__main__':
     cflib.crtp.init_drivers()
     factory = CachedCfFactory(rw_cache='./cache')
+    uris = uris[0:1]
     with Swarm(uris, factory=factory) as swarm:
         swarm.parallel_safe(light_check)
         print("light check done")
