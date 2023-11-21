@@ -4,6 +4,9 @@ import math
 import matplotlib.pyplot as plt
 from mpl_toolkits.mplot3d import Axes3D # <--- This is important for 3d plotting 
 
+import matplotlib.animation as animation
+
+np.set_printoptions(formatter={'float': lambda x: "{0:0.4f}".format(x)})
 GRAVITY_VEC = - np.array([0,0,1]).reshape((3,1)) *9.81
 
 procnoiseaccxy = 0.5
@@ -23,6 +26,8 @@ initialstdrp = 0.01
 initialstdy = 0.01
 
 tdoastdv = 0.15
+
+initial = np.array([0, 0, 0.5])
 
 def from_quat(q):
     R = np.zeros((3,3))
@@ -77,9 +82,7 @@ class KalmanFilter:
         self.R = np.eye(3)
         self.q = np.zeros((4, 1))
         self.q[0] = 1
-        self.S[0] = 0.1
-        self.S[1] = 0.1
-        self.S[2] = 0.5
+        self.S[:3] = initial.reshape((3,1))
 
         self.lastpredt = 0
         self.lastnoiseupdt = 0
@@ -132,7 +135,7 @@ class KalmanFilter:
 
         tmpq = tmpq *keep + rpzerorev * np.array([1, 0, 0, 0]).reshape((4, 1))
         
-        self.q = tmpq/np.linalg.norm(tmpq)
+        self.q = tmpq/(np.linalg.norm(tmpq) +1e-6)
 
         self.isupdated = True
 
@@ -153,20 +156,22 @@ class KalmanFilter:
         enforce_simmetry(self.P)
 
     def update_tdoa(self, tdoa, anchor0, anchor1):
-        d0 = np.linalg.norm(self.S[0:3] - anchor0)
-        d1 = np.linalg.norm(self.S[0:3] - anchor1)
+        d0 = np.linalg.norm(self.S[0:3] - anchor0.reshape((3,1)))
+        d1 = np.linalg.norm(self.S[0:3] - anchor1.reshape((3,1)))
         H = np.zeros((9, 1))
         H[0:3] = (self.S[0:3] - anchor1.reshape((3,1)))/d1 - (self.S[0:3] - anchor0.reshape((3,1)))/d0
         H = H.T
         error = tdoa - (d1-d0)
 
-        S = H @ self.P @ H.T + tdoastdv**2
-        K = self.P @ H.T *1/S
+        R = tdoastdv**2
+
+        HPHR = H @ self.P @ H.T + R
+        K = self.P @ H.T *1/HPHR
         self.S += K * error
 
-        self.P = (K @ H - np.eye(9)) @ self.P @ (K @ H - np.eye(9)).T
+        temp = (np.eye(9) - K @ H ) 
 
-        self.P += K @ K.T * tdoastdv**2
+        self.P = temp @ self.P @ temp.T + K @ K.T * R
 
         enforce_simmetry(self.P)
 
@@ -188,7 +193,7 @@ class KalmanFilter:
             tmpq[2] = dq[2]*self.q[0] - dq[3]*self.q[1] + dq[0]*self.q[2] + dq[1]*self.q[3]
             tmpq[3] = dq[3]*self.q[0] + dq[2]*self.q[1] - dq[1]*self.q[2] + dq[0]*self.q[3]
 
-            self.q = tmpq/np.linalg.norm(tmpq)
+            self.q = tmpq/(np.linalg.norm(tmpq) +1e-6)
 
             A = np.eye(9)
             d = self.S[6:]/2
@@ -214,10 +219,10 @@ class KalmanFilter:
         self.isupdated = False
 
 
-N = 100
+N = 1000
 
-acc = np.random.normal(loc=0, scale=0.01, size=(3, N)) + np.array([0,0,9.81]).reshape((3,1))
-gyro = np.random.normal(loc=0, scale=0.01, size=(3, N))
+acc = np.random.normal(loc=0, scale=0.0, size=(3, N)) + np.array([0,0,9.81]).reshape((3,1))
+gyro = np.random.normal(loc=0, scale=0.0, size=(3, N))
 
 
 anch_positions = np.zeros((8, 3))
@@ -232,9 +237,10 @@ anch_positions = np.array([[0,0,0.18],
 true_position = np.array([2, 2, 1])
 
 def get_tdoa_measure(i, j):
-    return np.linalg.norm((anch_positions[j, :]) - true_position) -  np.linalg.norm((anch_positions[i, :]) - true_position) + np.random.normal(loc=0, scale=0.0, size=(1,1))[0]
+    return np.linalg.norm((anch_positions[j, :]) - true_position) -  np.linalg.norm((anch_positions[i, :]) - true_position) + np.random.normal(loc=0, scale=0.01, size=(1,1))[0]
 
-S_history = np.zeros((3, N))
+S_history = np.zeros((3, N+1))
+S_history[:, 0] = initial
 
 def simulate():
     dt = 0.001
@@ -242,30 +248,35 @@ def simulate():
     anch1 = 1
 
     now = 0
-    next_pred = now + 0.01
+    next_pred = now 
     
     filter = KalmanFilter()
     for i in range(N):
 
         now = i *dt
         if now >= next_pred:
-
+            print(i)
             filter.predict(acc[:, i], gyro[:, i], now)
             next_pred = now + 0.01
 
-        filter.add_process_noise(dt)
+        filter.add_process_noise(now)
 
         tdoa = get_tdoa_measure( anch0, anch1)
 
         filter.update_tdoa(tdoa, anch_positions[anch0, :],  anch_positions[anch1, :])
 
-        filter.finalize()
 
         anch0 = (anch0+1)%8
         anch1 = (anch1+1)%8
+        
 
-        print(filter.S[:3])
-        S_history[:, i] = filter.S[:3].reshape((3,))
+        filter.finalize()
+
+        print(filter.S)
+        print(anch0, anch1)
+        S_history[:, i+1] = filter.S[:3].reshape((3,))
+
+        assert filter.P.all() >= 0
 
 
 def plot_coords(ax, coords):
@@ -277,11 +288,39 @@ def plot_coords(ax, coords):
     for i in range(8):
         ax.text(coords[i, 0], coords[i, 1], coords[i, 2], f"{i}", color="red")
 
+
+dist_data = np.zeros((3,3))
+def update(num, line, dists, info):
+    line.set_data(S_history[:2, :num])
+    line.set_3d_properties(S_history[2, :num])
+
+    if num == 0: return
+    anchA = (num-1)%8
+    anchB = (num)%8
+    info.set_text(f"anchor A : {anchA}, anchor B : {anchB}")
+    global dist_data
+    dist_data[:3, 0] = anch_positions[anchA, :3].reshape((3,))
+    dist_data[:3, 1] = S_history[:3, num-1].reshape((3,))
+    dist_data[:3, 2] = anch_positions[anchB, :3].reshape((3,))
+    dists.set_data(dist_data[:2, :])
+    dists.set_3d_properties(dist_data[2, :])
+
+
 simulate()
 fig = plt.figure()
 ax = fig.add_subplot(projection='3d')
 plot_coords(ax, anch_positions)
-ax.scatter(S_history[0, :], S_history[1,:], S_history[2,:])
+ax.scatter(true_position[0], true_position[1], true_position[2])
+info = ax.text2D(0.05, 0.95, "", transform=ax.transAxes)
+line = ax.plot([], [], [])[0]
+dists = ax.plot([], [], [])[0]
+
+
+ani = animation.FuncAnimation(
+    fig, update, N, fargs=(line, dists, info, ), interval=100)
+
+ani.save("animation.gif")
+
 plt.show()
 
 
