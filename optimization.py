@@ -8,7 +8,8 @@ from mpl_toolkits.mplot3d import Axes3D # <--- This is important for 3d plotting
 N_ANCHORS = 8
 N_COORDS = 3
 
-
+idx_to_msk = {0: np.array([0, 0, 0]), 5: np.array([0, 1, 0]), 7: np.array([1, 1, 0]), 1: np.array([1, 1, 1]),
+               2: np.array([1, 1, 1]), 3: np.array([1, 1, 1]), 4: np.array([1, 1, 1]), 6: np.array([1, 1, 1])}
 
 def cost(x, distances, to_reject=[]):
     cost = 0
@@ -20,14 +21,15 @@ def cost(x, distances, to_reject=[]):
 
             if (i,j) in to_reject or (j,i) in to_reject:
                 continue
-
-            cost += (distances[i][j] - np.sqrt(np.sum((x[i*N_COORDS:i*N_COORDS+3] - x[j*N_COORDS:j*N_COORDS+3])**2)))**2
+            
+            
+            cost += (distances[i][j] - np.sqrt(np.sum((x[i*N_COORDS:i*N_COORDS+3] - x[j*N_COORDS:j*N_COORDS+3] )**2)))**2
 
     print(cost)
 
     return cost
 
-def get_optimized_coords(distances, to_reject=[]):
+def get_optimized_coords(distances, to_reject=[], x0=np.zeros((N_ANCHORS*3,))):
 
     cons = ({'type': 'eq', 'fun': lambda x:  x[0]},
             {'type': 'eq', 'fun': lambda x:  x[1]},
@@ -35,12 +37,8 @@ def get_optimized_coords(distances, to_reject=[]):
             {'type': 'eq', 'fun': lambda x:  x[N_COORDS*5 + 0]},
             {'type': 'eq', 'fun': lambda x:  x[N_COORDS*5 + 2]},
             {'type': 'eq', 'fun': lambda x:  x[N_COORDS*7 + 2]},)
-    
-    #xc = (distances[0][1]**2 + distances[2][0]**2 - distances[2][1]**2)/(2*distances[0][1])
-    x0=np.zeros((N_ANCHORS*3,))
-    #x0[0:9] = np.array([0,0,0,distances[0][1],0,0, xc, np.sqrt((distances[2][0]**2-xc**2)), 0])
 
-    res = minimize(lambda x: cost(x, distances, to_reject=to_reject), x0=x0,constraints=cons)
+    res = minimize(lambda x: cost(x, distances, to_reject=to_reject), x0=x0, constraints=cons)
 
     return np.reshape(res.x, (N_ANCHORS, 3))
 
@@ -79,6 +77,19 @@ def infer_labels(coords):
 
     return label2coord
 
+def show(coords):
+
+    fig = plt.figure()
+    ax = fig.add_subplot(projection='3d')
+
+    ax.set_xlabel('X axis')
+    ax.set_ylabel('Y axis')
+    ax.set_zlabel('Z axis')
+    ax.scatter(coords[:, 0], coords[:, 1], coords[:, 2])
+    for i in range(N_ANCHORS):
+        ax.text(coords[i, 0], coords[i, 1], coords[i, 2], f"{i}", color="red")
+    plt.show()
+
 if __name__ == "__main__":
     
     # distances = from_coords_to_distances(np.array([[0,0,0],
@@ -108,14 +119,5 @@ if __name__ == "__main__":
     print("inferred order")
     print(coords)
 
-    fig = plt.figure()
-    ax = fig.add_subplot(projection='3d')
-
-    ax.set_xlabel('X axis')
-    ax.set_ylabel('Y axis')
-    ax.set_zlabel('Z axis')
-    ax.scatter(coords[:, 0], coords[:, 1], coords[:, 2])
-    for i in range(N_ANCHORS):
-        ax.text(coords[i, 0], coords[i, 1], coords[i, 2], f"{i}", color="red")
-    plt.show()
+    show(coords)
 
