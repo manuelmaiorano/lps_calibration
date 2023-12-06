@@ -4,6 +4,34 @@ import matplotlib.pyplot as plt
 from mpl_toolkits.mplot3d import Axes3D # <--- This is important for 3d plotting 
 
 
+def set_axes_equal(ax):
+    """
+    Make axes of 3D plot have equal scale so that spheres appear as spheres,
+    cubes as cubes, etc.
+
+    Input
+      ax: a matplotlib axis, e.g., as output from plt.gca().
+    """
+
+    x_limits = ax.get_xlim3d()
+    y_limits = ax.get_ylim3d()
+    z_limits = ax.get_zlim3d()
+
+    x_range = abs(x_limits[1] - x_limits[0])
+    x_middle = np.mean(x_limits)
+    y_range = abs(y_limits[1] - y_limits[0])
+    y_middle = np.mean(y_limits)
+    z_range = abs(z_limits[1] - z_limits[0])
+    z_middle = np.mean(z_limits)
+
+    # The plot bounding box is a sphere in the sense of the infinity
+    # norm, hence I call half the max range the plot radius.
+    plot_radius = 0.5*max([x_range, y_range, z_range])
+
+    ax.set_xlim3d([x_middle - plot_radius, x_middle + plot_radius])
+    ax.set_ylim3d([y_middle - plot_radius, y_middle + plot_radius])
+    ax.set_zlim3d([z_middle - plot_radius, z_middle + plot_radius])
+
 
 N_ANCHORS = 8
 N_COORDS = 3
@@ -23,13 +51,95 @@ def cost(x, distances, to_reject=[]):
                 continue
             
             
-            cost += (distances[i][j] - np.sqrt(np.sum((x[i*N_COORDS:i*N_COORDS+3] - x[j*N_COORDS:j*N_COORDS+3] )**2)))**2
+            cost += (distances[i][j] - np.sqrt(np.sum((x[i*N_COORDS:i*N_COORDS+3] - x[j*N_COORDS:j*N_COORDS+3] )**2)) )**2 
 
     print(cost)
 
     return cost
 
-def get_optimized_coords(distances, to_reject=[], x0=np.zeros((N_ANCHORS*3,))):
+def cost1(x, distances, to_reject=[]):
+    cost = 0
+
+    for i in range(N_ANCHORS):
+        for j in range(N_ANCHORS):
+            if i >= j:
+                continue
+
+            if (i,j) in to_reject or (j,i) in to_reject:
+                continue
+            
+            
+            cost += (distances[i][j] +154.6  - np.sqrt(np.sum((x[i*N_COORDS:i*N_COORDS+3] - x[j*N_COORDS:j*N_COORDS+3] )**2)) + x[N_ANCHORS * N_COORDS + i])**2 
+
+    cost +=  np.sum((x[N_ANCHORS*N_COORDS:] + 154.6)**2)
+    print(cost)
+
+    return cost
+
+
+def cost2(x, distances, to_reject=[]):
+    cost = 0
+
+    for i in range(N_ANCHORS):
+        for j in range(N_ANCHORS):
+            if i >= j:
+                continue
+
+            if (i,j) in to_reject or (j,i) in to_reject:
+                continue
+            
+            ioffset = np.array([0, 0, 1]) * x[N_ANCHORS * N_COORDS + i]
+            joffset = np.array([0, 0, 1]) * x[N_ANCHORS * N_COORDS + j]
+            cost += (distances[i][j] - np.sqrt(np.sum((x[i*N_COORDS:i*N_COORDS+3] +ioffset - x[j*N_COORDS:j*N_COORDS+3] -joffset)**2)))**2
+
+    cost +=  np.sum(x[N_ANCHORS*N_COORDS:] **2)/500
+    print(cost)
+
+    return cost
+
+def cost3(x, distances, to_reject=[]):
+    cost = 0
+
+    for i in range(N_ANCHORS):
+        for j in range(N_ANCHORS):
+            if i >= j:
+                continue
+
+            if (i,j) in to_reject or (j,i) in to_reject:
+                continue
+            
+            cost += (distances[i][j] - np.sqrt(np.sum((x[i*N_COORDS:i*N_COORDS+3] - x[j*N_COORDS:j*N_COORDS+3] )**2)) )**2 
+
+    for i in range(N_ANCHORS):
+        if i == 1 or i == 3 or i == 4 or i == 6:
+            cost += (x[N_COORDS*i + 2] - 2.2)**2
+    print(cost)
+
+    return cost
+
+def cost4(x, distances, to_reject=[]):
+    cost = 0
+    idx = 0
+    for i in range(N_ANCHORS):
+        for j in range(N_ANCHORS):
+            if i >= j:
+                continue
+
+            if (i,j) in to_reject or (j,i) in to_reject:
+                continue
+            
+            cost += (distances[i][j] +x[N_COORDS*N_ANCHORS+idx] - np.sqrt(np.sum((x[i*N_COORDS:i*N_COORDS+3] - x[j*N_COORDS:j*N_COORDS+3] )**2)) )**2 
+            idx += 1
+
+    cost +=  np.sum((x[N_ANCHORS*N_COORDS:] )**2)
+    for i in range(N_ANCHORS):
+        if i == 1 or i == 3 or i == 4 or i == 6:
+            cost += (x[N_COORDS*i + 2] - 2.2)**2
+    print(cost)
+
+    return cost
+
+def get_optimized_coords(distances, to_reject=[], x0=np.zeros((N_ANCHORS*3 + 8,))):
 
     cons = ({'type': 'eq', 'fun': lambda x:  x[0]},
             {'type': 'eq', 'fun': lambda x:  x[1]},
@@ -37,10 +147,19 @@ def get_optimized_coords(distances, to_reject=[], x0=np.zeros((N_ANCHORS*3,))):
             {'type': 'eq', 'fun': lambda x:  x[N_COORDS*5 + 0]},
             {'type': 'eq', 'fun': lambda x:  x[N_COORDS*5 + 2]},
             {'type': 'eq', 'fun': lambda x:  x[N_COORDS*7 + 2]},)
+    
+    x0[N_ANCHORS*N_COORDS:] = -154.6
+    #x0[N_ANCHORS*N_COORDS:] =  np.random.normal(loc=0, scale=2, size=(28, ))
+    #x0[:] =  np.random.normal(loc=0, scale=5, size=(24+28, ))
+    #x0[N_COORDS*6 + 2] = 2
 
-    res = minimize(lambda x: cost(x, distances, to_reject=to_reject), x0=x0, constraints=cons)
-
-    return np.reshape(res.x, (N_ANCHORS, 3))
+    res = minimize(lambda x: cost3(x, distances, to_reject=to_reject), x0=x0, constraints=cons)
+    print(res.x)
+    out = np.reshape(res.x[:N_COORDS *N_ANCHORS], (N_ANCHORS, 3))
+    flipz = 1 if out[6, 2]  > 0 else -1
+    flipx = 1 if out[2, 0]  > 0 else -1
+    flipy  = 1 if out[5, 1]  > 0 else -1
+    return out * np.array([1*flipx, 1*flipy, 1*flipz])
 
 def from_coords_to_distances(coords):
     distances = np.zeros((N_ANCHORS, N_ANCHORS))
@@ -88,6 +207,7 @@ def show(coords):
     ax.scatter(coords[:, 0], coords[:, 1], coords[:, 2])
     for i in range(N_ANCHORS):
         ax.text(coords[i, 0], coords[i, 1], coords[i, 2], f"{i}", color="red")
+    #set_axes_equal(ax)
     plt.show()
 
 if __name__ == "__main__":

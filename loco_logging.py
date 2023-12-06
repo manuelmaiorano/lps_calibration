@@ -17,12 +17,17 @@ from lpslib.lopoanchor import LoPoAnchor
 import matplotlib.pyplot as plt
 from mpl_toolkits.mplot3d import Axes3D # <--- This is important for 3d plotting 
 
+np.set_printoptions(formatter={'float': lambda x: "{0:0.4f}".format(x)})
+
+
 URI = 'radio://0/80/2M/E7E7E7E703'
 
 N_ANCHORS = 8
+N_DATA = 100
 
 distances_avg = np.zeros((N_ANCHORS, N_ANCHORS))
 distances_count = np.zeros((N_ANCHORS, N_ANCHORS))
+distances_history = np.zeros((N_DATA, N_ANCHORS, N_ANCHORS))
 
 def split(a, n):
     k, m = divmod(len(a), n)
@@ -52,17 +57,18 @@ def get_log_keys():
 
 
 def log_update_distances(name, timestamp, data, logconf):
-
+   
     global distances_avg
     global distances_count
+    global distances_history
     for name, value in data.items():
         i = int(name[10])
         j = int(name[12])
+        distances_history[int(distances_count[i][j])][i][j] = process(value)
         distances_avg[i][j] = distances_avg[i][j] * distances_count[i][j] + process(value)
         distances_count[i][j] += 1
         distances_avg[i][j] /= distances_count[i][j]
 
-    print(distances_avg)
 
 def write_to_anchors(coords):
     cflib.crtp.init_drivers()
@@ -79,7 +85,6 @@ if __name__ == '__main__':
 
     cf = Crazyflie(rw_cache='./cache')
     with SyncCrazyflie(URI, cf=cf) as scf:
-
         for i, log in enumerate(get_log_keys()):
             log_util.add_log(scf, f"loco_log{i}", log, cb=log_update_distances)
             
@@ -90,10 +95,15 @@ if __name__ == '__main__':
 
         time.sleep(10)
 
+    #print(distances_history)
+    for i in range(distances_history.shape[0]):
+        print(distances_history[i, :, :])
+
     print("optimization")
-    coords = optimization.get_optimized_coords(distances_avg)
+    coords = optimization.get_optimized_coords(np.median(distances_history[10:, :, :], 0))
+    #coords = optimization.get_optimized_coords(np.median(distances_history, 0))
     print(coords)
-    coords = optimization.infer_labels(coords)
+    #coords = optimization.infer_labels(coords)
    
     print("inferred order")
     print(coords)
