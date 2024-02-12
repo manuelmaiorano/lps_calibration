@@ -36,8 +36,6 @@ def set_axes_equal(ax):
 N_ANCHORS = 8
 N_COORDS = 3
 
-idx_to_msk = {0: np.array([0, 0, 0]), 5: np.array([0, 1, 0]), 7: np.array([1, 1, 0]), 1: np.array([1, 1, 1]),
-               2: np.array([1, 1, 1]), 3: np.array([1, 1, 1]), 4: np.array([1, 1, 1]), 6: np.array([1, 1, 1])}
 
 def cost(x, distances, to_reject=[]):
     cost = 0
@@ -57,88 +55,6 @@ def cost(x, distances, to_reject=[]):
 
     return cost
 
-def cost1(x, distances, to_reject=[]):
-    cost = 0
-
-    for i in range(N_ANCHORS):
-        for j in range(N_ANCHORS):
-            if i >= j:
-                continue
-
-            if (i,j) in to_reject or (j,i) in to_reject:
-                continue
-            
-            
-            cost += (distances[i][j] +154.6  - np.sqrt(np.sum((x[i*N_COORDS:i*N_COORDS+3] - x[j*N_COORDS:j*N_COORDS+3] )**2)) + x[N_ANCHORS * N_COORDS + i])**2 
-
-    cost +=  np.sum((x[N_ANCHORS*N_COORDS:] + 154.6)**2)
-    print(cost)
-
-    return cost
-
-
-def cost2(x, distances, to_reject=[]):
-    cost = 0
-
-    for i in range(N_ANCHORS):
-        for j in range(N_ANCHORS):
-            if i >= j:
-                continue
-
-            if (i,j) in to_reject or (j,i) in to_reject:
-                continue
-            
-            ioffset = np.array([0, 0, 1]) * x[N_ANCHORS * N_COORDS + i]
-            joffset = np.array([0, 0, 1]) * x[N_ANCHORS * N_COORDS + j]
-            cost += (distances[i][j] - np.sqrt(np.sum((x[i*N_COORDS:i*N_COORDS+3] +ioffset - x[j*N_COORDS:j*N_COORDS+3] -joffset)**2)))**2
-
-    cost +=  np.sum(x[N_ANCHORS*N_COORDS:] **2)/500
-    print(cost)
-
-    return cost
-
-def cost3(x, distances, to_reject=[]):
-    cost = 0
-
-    for i in range(N_ANCHORS):
-        for j in range(N_ANCHORS):
-            if i >= j:
-                continue
-
-            if (i,j) in to_reject or (j,i) in to_reject:
-                continue
-            
-            cost += (distances[i][j] - np.sqrt(np.sum((x[i*N_COORDS:i*N_COORDS+3] - x[j*N_COORDS:j*N_COORDS+3] )**2)) )**2 
-
-    for i in range(N_ANCHORS):
-        if i == 1 or i == 3 or i == 4 or i == 6:
-            cost += (x[N_COORDS*i + 2] - 2.2)**2
-    print(cost)
-
-    return cost
-
-def cost4(x, distances, to_reject=[]):
-    cost = 0
-    idx = 0
-    for i in range(N_ANCHORS):
-        for j in range(N_ANCHORS):
-            if i >= j:
-                continue
-
-            if (i,j) in to_reject or (j,i) in to_reject:
-                continue
-            
-            cost += (distances[i][j] +x[N_COORDS*N_ANCHORS+idx] - np.sqrt(np.sum((x[i*N_COORDS:i*N_COORDS+3] - x[j*N_COORDS:j*N_COORDS+3] )**2)) )**2 
-            idx += 1
-
-    cost +=  np.sum((x[N_ANCHORS*N_COORDS:] )**2)
-    for i in range(N_ANCHORS):
-        if i == 1 or i == 3 or i == 4 or i == 6:
-            cost += (x[N_COORDS*i + 2] - 2.2)**2
-    print(cost)
-
-    return cost
-
 def get_optimized_coords(distances, to_reject=[], x0=np.zeros((N_ANCHORS*3 + 8,))):
 
     cons = ({'type': 'eq', 'fun': lambda x:  x[0]},
@@ -153,7 +69,7 @@ def get_optimized_coords(distances, to_reject=[], x0=np.zeros((N_ANCHORS*3 + 8,)
     #x0[:] =  np.random.normal(loc=0, scale=5, size=(24+28, ))
     #x0[N_COORDS*6 + 2] = 2
 
-    res = minimize(lambda x: cost3(x, distances, to_reject=to_reject), x0=x0, constraints=cons)
+    res = minimize(lambda x: cost1(x, distances, to_reject=to_reject), x0=x0, constraints=cons)
     print(res.x)
     out = np.reshape(res.x[:N_COORDS *N_ANCHORS], (N_ANCHORS, 3))
     flipz = 1 if out[6, 2]  > 0 else -1
@@ -232,12 +148,35 @@ if __name__ == "__main__":
     to_reject = [(0,4), (1,5), (2,6), (3,7)]
     
     coords = get_optimized_coords(distances, to_reject=to_reject)
+
+
+    SPEED_OF_LIGHT = 299792458
+    ANTENA_DELAY = 154.6
+    FREQ = 499.2e6 * 128
+    GD = 0.01
+    EPS = 1e-6
+
+    coords_before = np.array(coords)
+
+    coords[0, 1] = 0.5
+
+    print("cost1")
+    for _ in range(200):
+        for i in range(distances.shape[0]):
+            for j in range(distances.shape[1]):
+                if i == j: continue
+                diff = coords[i,:]- coords[j, :]
+
+                dist = distances[i][j]#/FREQ * SPEED_OF_LIGHT - ANTENA_DELAY
+                norm = np.sqrt((diff**2).sum())
+                error = dist-norm
+                coords[i] += GD * 2 * error * diff /(norm + EPS)
+                print(cost(coords.flatten(), distances))
     
     print("results")
     print(coords)
-    coords = infer_labels(coords)
-    print("inferred order")
-    print(coords)
+
+    print(coords-coords_before)
 
     show(coords)
 

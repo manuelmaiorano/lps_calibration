@@ -102,11 +102,6 @@ if __name__ == '__main__':
     with SyncCrazyflie(URI, cf=cf) as scf:
         for i, log in enumerate(get_log_keys()):
             log_util.add_log(scf, f"loco_log{i}", log, cb=log_update_distances)
-            
-
-        # log_util.add_log(scf, "loco_log", [("tdoa2.dist0-1", "uint16_t"),
-        #                                    ("tdoa2.dist1-0", "uint16_t"),
-        #                                   ], cb=log_callback)
 
         time.sleep(N_DATA/10)
 
@@ -121,13 +116,9 @@ if __name__ == '__main__':
 
     print("optimization")
 
-    coords = optimization.get_optimized_coords(np.median(distances_history[10:, :, :], 0))
-    print(np.median(distances_history[10:, :, :], 0))
+    coords = optimization.get_optimized_coords(np.median(distances_history[:, :, :], 0))
+    print(np.median(distances_history[:, :, :], 0))
     #coords = optimization.get_optimized_coords(np.median(distances_history, 0))
-    print(coords)
-    #coords = optimization.infer_labels(coords)
-   
-    print("inferred order")
     print(coords)
 
     fig = plt.figure()
@@ -140,10 +131,4 @@ if __name__ == '__main__':
     for i in range(N_ANCHORS):
         ax.text(coords[i, 0], coords[i, 1], coords[i, 2], f"{i}", color="red")
     plt.show()
-    # write_to_anchors(coords)
-
-    import get_coord
-
-    print(get_coord.real_data-coords)
-    #np.savetxt(f"data_cal/trial_{9}", get_coord.real_data-coords)
-    print_coords(coords)
+    write_to_anchors(coords)
