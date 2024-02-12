@@ -23,20 +23,35 @@ np.set_printoptions(formatter={'float': lambda x: "{0:0.4f}".format(x)})
 URI = 'radio://0/80/2M/E7E7E7E703'
 
 N_ANCHORS = 8
-N_DATA = 100
+N_DATA = 300
 
 distances_avg = np.zeros((N_ANCHORS, N_ANCHORS))
 distances_count = np.zeros((N_ANCHORS, N_ANCHORS))
 distances_history = np.zeros((N_DATA, N_ANCHORS, N_ANCHORS))
 
+def print_coords(coords):
+
+    s = ""
+    for i in range(8):
+        s += f"{i}:\n"
+        for j, coord in enumerate("xyz"):
+            s += f"  {coord}: {coords[i, j]:.2f}\n"
+
+    return s
+
+
 def split(a, n):
     k, m = divmod(len(a), n)
     return (a[i*k+min(i, m):(i+1)*k+min(i+1, m)] for i in range(n))
 
+SPEED_OF_LIGHT = 299792458
+ANTENA_DELAY = 154.6
+FREQ = 499.2e6 * 128
+
 def process(x):
     if not x:
         return 0
-    return x/(499.2e6 * 128) * 299792458 -154.6
+    return x/(FREQ) * SPEED_OF_LIGHT - ANTENA_DELAY
 
 def log_callback(name, timestamp, data, logconf):
     print("-"*50)
@@ -93,14 +108,21 @@ if __name__ == '__main__':
         #                                    ("tdoa2.dist1-0", "uint16_t"),
         #                                   ], cb=log_callback)
 
-        time.sleep(10)
+        time.sleep(N_DATA/10)
 
     #print(distances_history)
+    with open(f"data_dist/dist_{5}.txt", "w") as f:
+        for n in range(distances_history.shape[0]):
+
+            print(distances_history[n, :, :], file=f)
+
     for i in range(distances_history.shape[0]):
         print(distances_history[i, :, :])
 
     print("optimization")
+
     coords = optimization.get_optimized_coords(np.median(distances_history[10:, :, :], 0))
+    print(np.median(distances_history[10:, :, :], 0))
     #coords = optimization.get_optimized_coords(np.median(distances_history, 0))
     print(coords)
     #coords = optimization.infer_labels(coords)
@@ -119,3 +141,9 @@ if __name__ == '__main__':
         ax.text(coords[i, 0], coords[i, 1], coords[i, 2], f"{i}", color="red")
     plt.show()
     # write_to_anchors(coords)
+
+    import get_coord
+
+    print(get_coord.real_data-coords)
+    #np.savetxt(f"data_cal/trial_{9}", get_coord.real_data-coords)
+    print_coords(coords)
